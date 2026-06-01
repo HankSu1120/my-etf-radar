@@ -13,34 +13,16 @@ import datetime
 SUPABASE_URL = "https://wgqwszdmvwfanrsghtcn.supabase.co" 
 SUPABASE_KEY = "這裡請貼上你那一串超級長的anon_public密鑰"
 
-@st.cache_resource
-def init_supabase():
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
-
-supabase: Client = init_supabase()
-
-# 網頁基本設定
-st.set_page_config(page_title="高股息 ETF 雲端決策面板", layout="wide")
-st.title("📊 高股息 ETF 智慧決策面板 (複利校正完全體)")
-st.subheader("基於自訂「除息後低檔撈底 ＆ 4天高檔鈍化抱緊」策略")
-
-FEATURED_LIST = {
-    "00929.TW": "復華台灣科技優息 (月配)",
-    "00919.TW": "群益台灣精選高息 (季配)",
-    "0056.TW": "元大高股息 (季配)",
-    "00878.TW": "國泰永續高股息 (季配)"
-}
-
 @st.cache_data(ttl=3600)
 def get_etf_data(ticker):
     try:
         etf = yf.Ticker(ticker)
-# 🟢 修正後的雙保險純淨數據下載邏輯：
-# 直接向 Yahoo 強制索取「還原除權息後的真實歷史收盤價 (auto_adjust=True)」
-df = etf.history(period="5y", auto_adjust=True)
-
-if df.empty or len(df) < 22:
-    df = etf.history(period="max", auto_adjust=True)
+        # 強制索取「還原除權息後的真實歷史收盤價 (auto_adjust=True)」
+        df = etf.history(period="5y", auto_adjust=True)
+        
+        # 新股防禦機制：如果 5y 抓下來是空的（例如 00929 在雲端被拒絕）
+        if df.empty or len(df) < 22:
+            df = etf.history(period="max", auto_adjust=True)
             
         if df.empty or len(df) < 22:
             return None
@@ -49,11 +31,20 @@ if df.empty or len(df) < 22:
             df.columns = df.columns.get_level_values(0)
             
         df_cleaned = pd.DataFrame(index=df.index)
-        for col in ['Open', 'High', 'Low', 'Close', 'Volume', 'Dividends']:
+        
+        # 💡 注意：因為開啟了 auto_adjust=True，Yahoo 會自動把 Open, High, Low, Close 轉換成還原價
+        # 資料庫裡不會再有單獨的 'Adj Close' 欄位，這能保證與 Colab 的數據 100% 同步！
+        for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
             if col in df.columns:
                 df_cleaned[col] = df[col].iloc[:, 0] if isinstance(df[col], pd.DataFrame) else df[col]
             else:
                 df_cleaned[col] = 0.0
+                
+        # 另外單獨保留 Dividends 欄位用來計算除息日天數
+        if 'Dividends' in df.columns:
+            df_cleaned['Dividends'] = df['Dividends'].iloc[:, 0] if isinstance(df['Dividends'], pd.DataFrame) else df['Dividends']
+        else:
+            df_cleaned['Dividends'] = 0.0
                 
         df_cleaned['MA22'] = df_cleaned['Close'].rolling(window=22).mean()
         stoch = ta.momentum.StochasticOscillator(
@@ -63,6 +54,7 @@ if df.empty or len(df) < 22:
         df_cleaned['K'] = stoch.stoch()
         df_cleaned['D'] = stoch.stoch_signal()
         return df_cleaned.dropna()
+        
     except Exception as e:
         print(f"Error loading {ticker}: {e}")
         return None
