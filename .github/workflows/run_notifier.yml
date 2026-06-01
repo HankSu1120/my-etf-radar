@@ -2,19 +2,19 @@ name: Run ETF LINE Notifier
 
 on:
   schedule:
-    # 每天國際標準時 (UTC) 07:30 執行，剛好等於台灣時間下午 15:30
+    # 每天台灣時間下午 15:30 自動執行
     - cron: '30 7 * * *'
-  workflow_dispatch: # 允許我們在網頁上手動點擊按鈕來測試執行
+  workflow_dispatch: # 允許網頁上手動點擊測試
 
 jobs:
   run-notifier:
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 複製 GitHub 程式碼
-        uses: actions/checkout@v3
+      - name: 📥 複製 GitHub 程式碼 (升級至 v4)
+        uses: actions/checkout@v4
 
-      - name: 🐍 設定 Python 環境
-        uses: actions/setup-python@v4
+      - name: 🐍 設定 Python 環境 (升級至 v5)
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
