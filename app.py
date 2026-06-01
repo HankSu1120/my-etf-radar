@@ -8,24 +8,26 @@ from supabase import create_client, Client
 import datetime
 
 # ==========================================
-# 🔑 雲端基地連線設定 (請保持你原本的設定)
+# ⚙️ 1. 網頁最基本初始化設定 (必須在最頂端)
 # ==========================================
-SUPABASE_URL = "https://wgqwszdmvwfanrsghtcn.supabase.co" 
-SUPABASE_KEY = "這裡請貼上你那一串超級長的anon_public密鑰"
-
-@st.cache_data(ttl=3600)
-def get_etf_data(ticker):
-    try:
-        etf = yf.Ticker(ticker)
-        # 強制索取「還原除權息後的真實歷史收盤價 (auto_adjust=True)」
-        df = etf.history(period="5y", auto_adjust=True)
-        # 網頁基本設定
 st.set_page_config(page_title="高股息 ETF 雲端決策面板", layout="wide")
 st.title("📊 高股息 ETF 智慧決策面板 (複利校正完全體)")
 st.subheader("基於自訂「除息後低檔撈底 ＆ 4天高檔鈍化抱緊」策略")
 
 # ==========================================
-# 🎯 檢查這裡：四大天王精選清單定義（必須放在 get_etf_data 之前！）
+# 🔑 2. 雲端基地連線設定 (請保持你原本的設定)
+# ==========================================
+SUPABASE_URL = "https://wgqwszdmvwfanrsghtcn.supabase.co" 
+SUPABASE_KEY = "這裡請貼上你那一串超級長的anon_public密鑰"
+
+@st.cache_resource
+def init_supabase():
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+supabase: Client = init_supabase()
+
+# ==========================================
+# 🎯 3. 四大天王精選清單定義
 # ==========================================
 FEATURED_LIST = {
     "00929.TW": "復華台灣科技優息 (月配)",
@@ -33,6 +35,17 @@ FEATURED_LIST = {
     "0056.TW": "元大高股息 (季配)",
     "00878.TW": "國泰永續高股息 (季配)"
 }
+
+# ==========================================
+# 📥 4. 歷史數據下載與指標計算大腦 (完美還原價版)
+# ==========================================
+@st.cache_data(ttl=3600)
+def get_etf_data(ticker):
+    try:
+        etf = yf.Ticker(ticker)
+        # 強制索取「還原除權息後的真實歷史收盤價 (auto_adjust=True)」
+        df = etf.history(period="5y", auto_adjust=True)
+        
         # 新股防禦機制：如果 5y 抓下來是空的（例如 00929 在雲端被拒絕）
         if df.empty or len(df) < 22:
             df = etf.history(period="max", auto_adjust=True)
@@ -45,15 +58,13 @@ FEATURED_LIST = {
             
         df_cleaned = pd.DataFrame(index=df.index)
         
-        # 💡 注意：因為開啟了 auto_adjust=True，Yahoo 會自動把 Open, High, Low, Close 轉換成還原價
-        # 資料庫裡不會再有單獨的 'Adj Close' 欄位，這能保證與 Colab 的數據 100% 同步！
         for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
             if col in df.columns:
                 df_cleaned[col] = df[col].iloc[:, 0] if isinstance(df[col], pd.DataFrame) else df[col]
             else:
                 df_cleaned[col] = 0.0
                 
-        # 另外單獨保留 Dividends 欄位用來計算除息日天數
+        # 單獨保留 Dividends 欄位用來計算除息日天數
         if 'Dividends' in df.columns:
             df_cleaned['Dividends'] = df['Dividends'].iloc[:, 0] if isinstance(df['Dividends'], pd.DataFrame) else df['Dividends']
         else:
@@ -72,7 +83,9 @@ FEATURED_LIST = {
         print(f"Error loading {ticker}: {e}")
         return None
 
-# 雷達掃描邏輯
+# ==========================================
+# 📡 5. 背景雲端雷達掃描邏輯
+# ==========================================
 def scan_and_save_signals():
     radar_data = []
     today_str = datetime.date.today().strftime('%Y-%m-%d')
@@ -118,9 +131,10 @@ def scan_and_save_signals():
             radar_data.append({"ticker": ticker, "price": float(latest['Close']), "k": float(latest['K']), "d": float(latest['D']), "status": status_text})
     return radar_data
 
-# 核心回測引擎 (與 Colab 100% 同步的真實複利模型)
+# ==========================================
+# 📊 6. 核心回測引擎 (與 Colab 100% 同步的真實複利模型)
+# ==========================================
 def run_backtest_5y_corrected(df_all):
-    # 💡 【核心修復二】：回測時只切出最近 5 年 (最大 1200 天)，新股就直接用全部天數
     df = df_all.tail(1200).copy()
     
     position = 0
@@ -191,7 +205,7 @@ def run_backtest_5y_corrected(df_all):
     }
 
 # ==========================================
-# 畫面佈局
+# 🖥️ 7. 前端畫面佈局與渲染
 # ==========================================
 current_radar = scan_and_save_signals()
 
@@ -246,7 +260,6 @@ def render_etf_dashboard(ticker, display_name):
         with st.spinner("🚀 複利量化回測引擎運行中..."):
             res = run_backtest_5y_corrected(df)
             
-            # 💡 【核心修復三】：只有當「實際天數真的不滿5年（小於1200天）」才噴出警告
             if res['actual_days'] < 1200:
                 st.warning(f"⚠️ **【上市未滿五年提示】**：{ticker} 在台股上市至今僅有 `{res['actual_days']}` 個交易日，以下數據為其自上市日至今的實際模擬結果。")
                 
@@ -291,5 +304,5 @@ if mode == "精選個股主頁 (按鈕切換)":
 else:
     search_input = st.sidebar.text_input("輸入台股代碼 (例如: 00940)", value="00940")
     search_input_full = search_input.strip() if search_input.endswith(".TW") else f"{search_input.strip()}.TW"
-    st.info("💡 **【實戰操盤錦囊】** 下方技術線圖中，**開頭綠色垂直虛線**代表【除息日】。下方 KD 圖中，**紅色點虛線**為 82 出場防守線 Gord，**綠色點虛線**為 18 撈底警戒線。")
+    st.info("💡 **【實戰操盤錦囊】** 下方技術線圖中，**開頭綠色垂直虛線**代表【除息日】。下方 KD 圖中，**紅色點虛線**為 82 出場防守線，**綠色點虛線**為 18 撈底警戒線。")
     render_etf_dashboard(search_input_full, "自訂搜尋個股分析")
