@@ -1,0 +1,4 @@
+yfinance
+ta
+plotly
+supabase
