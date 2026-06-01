@@ -93,3 +93,21 @@ def check_signals_and_notify():
                         },
                         "body": {
                             "type": "box",
+                            "layout": "vertical",
+                            "contents": contents
+                        }
+                    }
+                }
+            ]
+        }
+        
+        req = requests.post(line_url, headers=headers, data=json.dumps(flex_payload))
+        if req.status_code == 200:
+            print("🟢 LINE 機器人高級訊息（Flex Message）發送成功！")
+        else:
+            print(f"❌ 發送失敗，LINE 伺服器錯誤回應: {req.text}")
+    else:
+        print("⚪ 今日皆處於觀望型態，不發送 LINE 訊息打擾。")
+
+if __name__ == "__main__":
+    check_signals_and_notify()
