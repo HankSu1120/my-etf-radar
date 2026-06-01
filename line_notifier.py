@@ -45,9 +45,9 @@ def check_signals_and_notify():
     for row in response.data:
         status = row.get('signal_status', '⚪ 觀望中')
         
-        # 改成這樣（讓觀望也一起發送）：
-if "買入" in status or "賣出" in status or "抱緊" in status or "觀望" in status:
-            color = "#2ecc71" if "買入" in status else ("#e74c3c" if "賣出" in status else "#f1c40f")
+        # 💡 已為您強制開啟「觀望中」也能觸發，用來進行實戰發送測試！
+        if "買入" in status or "賣出" in status or "抱緊" in status or "觀望" in status:
+            color = "#2ecc71" if "買入" in status else ("#e74c3c" if "賣出" in status else ("#f1c40f" if "抱緊" in status else "#95a5a6"))
             
             item_block = {
                 "type": "box",
@@ -93,21 +93,3 @@ if "買入" in status or "賣出" in status or "抱緊" in status or "觀望" in
                         },
                         "body": {
                             "type": "box",
-                            "layout": "vertical",
-                            "contents": contents
-                        }
-                    }
-                }
-            ]
-        }
-        
-        req = requests.post(line_url, headers=headers, data=json.dumps(flex_payload))
-        if req.status_code == 200:
-            print("🟢 LINE 機器人高級訊息（Flex Message）發送成功！")
-        else:
-            print(f"❌ 發送失敗，LINE 伺服器錯誤回應: {req.text}")
-    else:
-        print("⚪ 今日皆處於觀望型態，不發送 LINE 訊息打擾。")
-
-if __name__ == "__main__":
-    check_signals_and_notify()
