@@ -11,7 +11,7 @@ import datetime
 # 🔑 雲端基地連線設定 (請保持你原本的設定)
 # ==========================================
 SUPABASE_URL = "https://wgqwszdmvwfanrsghtcn.supabase.co" 
-SUPABASE_KEY = "這裡請填入你原本長長的anon_public密鑰"
+SUPABASE_KEY = "這裡請貼上你那一串超級長的anon_public密鑰"
 
 @st.cache_resource
 def init_supabase():
@@ -21,7 +21,7 @@ supabase: Client = init_supabase()
 
 # 網頁基本設定
 st.set_page_config(page_title="高股息 ETF 雲端決策面板", layout="wide")
-st.title("📊 高股息 ETF 智慧決决策面板 (複利校正完全體)")
+st.title("📊 高股息 ETF 智慧決策面板 (複利校正完全體)")
 st.subheader("基於自訂「除息後低檔撈底 ＆ 4天高檔鈍化抱緊」策略")
 
 FEATURED_LIST = {
@@ -35,10 +35,17 @@ FEATURED_LIST = {
 def get_etf_data(ticker):
     try:
         etf = yf.Ticker(ticker)
-        # 💡 防禦修復一：改抓 6 年歷史數據，確保 5 年回測時天數絕對飽滿不缺件
-        df = etf.history(period="6y", auto_adjust=False, actions=True)
+        # 💡 【核心修復一】：先嘗試抓 5年 數據，確保舊股票天數飽滿
+        df = etf.history(period="5y", auto_adjust=False, actions=True)
+        
+        # 💡 【新股防禦機制】：如果 5y 抓下來是空的（代表是像 00929 這種年輕股票，在雲端被拒絕）
+        if df.empty or len(df) < 22:
+            # 自動改用 period="max" 抓取它出生到現在的所有歷史數據
+            df = etf.history(period="max", auto_adjust=False, actions=True)
+            
         if df.empty or len(df) < 22:
             return None
+            
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
             
@@ -107,18 +114,15 @@ def scan_and_save_signals():
             radar_data.append({"ticker": ticker, "price": float(latest['Close']), "k": float(latest['K']), "d": float(latest['D']), "status": status_text})
     return radar_data
 
-# ==========================================
-# 📊 究極修復：與 Colab 100% 同步的真實複利回測引擎
-# ==========================================
+# 核心回測引擎 (與 Colab 100% 同步的真實複利模型)
 def run_backtest_5y_corrected(df_all):
-    # ⚡ 核心修復二：精準將回測區間限制在最近 5 年內（約 1200 個交易日）
+    # 💡 【核心修復二】：回測時只切出最近 5 年 (最大 1200 天)，新股就直接用全部天數
     df = df_all.tail(1200).copy()
     
     position = 0
     buy_price = 0
     trade_log = []
     
-    # 模擬實質錢包翻滾
     start_balance = 1000000.0
     current_balance = start_balance
     
@@ -127,43 +131,33 @@ def run_backtest_5y_corrected(df_all):
     
     for i in range(5, len(df)):
         current_date = df.index[i].strftime('%Y-%m-%d')
-        
-        # 動態計算除息距離
         div_days = 999
         for k in range(i, -1, -1):
             if df['Dividends'].iloc[k] > 0:
                 div_days = i - k
                 break
         
-        # 1. 買入
         if position == 0 and div_days <= 20:
             low_zone = False
             for j in range(i-4, i+1):
-                if df['K'].iloc[j] < 18 and df['D'].iloc[j] < 18: 
-                    low_zone = True
+                if df['K'].iloc[j] < 18 and df['D'].iloc[j] < 18: low_zone = True
             if low_zone and df['K'].iloc[i] > df['D'].iloc[i] and df['K'].iloc[i-1] <= df['D'].iloc[i-1]:
                 position = 1
                 buy_price = df['Close'].iloc[i]
                 trade_log.append(f"🟢 【買入】日期: {current_date} | 價格: ${buy_price:.2f}")
                 
-        # 2. 賣出
         elif position == 1:
             k_window_4d = df['K'].iloc[i-4:i]
             d_window_4d = df['D'].iloc[i-4:i]
             if (k_window_4d > 82).all() and (d_window_4d > 82).all() and df['K'].iloc[i] < 82:
                 position = 0
                 sell_price = df['Close'].iloc[i]
-                
-                # 計算單趟報酬率
                 ret = (sell_price - buy_price) / buy_price * 100
                 if ret > 0: earn_pcts.append(ret)
                 else: loss_pcts.append(ret)
-                
-                # 💥 實質複利注入：資產直接滾動
                 current_balance = current_balance * (1 + ret / 100)
                 trade_log.append(f"🔴 【賣出】日期: {current_date} | 價格: ${sell_price:.2f} | 本趟獲利: {ret:+.2f}%")
                 
-    # 結算未平倉
     if position == 1:
         sell_price = df['Close'].iloc[-1]
         ret = (sell_price - buy_price) / buy_price * 100
@@ -172,7 +166,6 @@ def run_backtest_5y_corrected(df_all):
         current_balance = current_balance * (1 + ret / 100)
         trade_log.append(f"🔒 【未平倉結算】價格: ${sell_price:.2f} | 帳面效益: {ret:+.2f}%")
         
-    # 計算量化核心指標
     total_trades = len(earn_pcts) + len(loss_pcts)
     strategy_return = ((current_balance - start_balance) / start_balance) * 100
     
@@ -190,7 +183,7 @@ def run_backtest_5y_corrected(df_all):
         "avg_earn": avg_earn,
         "avg_loss": avg_loss,
         "logs": trade_log,
-        "actual_days": len(df_all)  # 用來做未滿5年判定
+        "actual_days": len(df_all)
     }
 
 # ==========================================
@@ -249,8 +242,8 @@ def render_etf_dashboard(ticker, display_name):
         with st.spinner("🚀 複利量化回測引擎運行中..."):
             res = run_backtest_5y_corrected(df)
             
-            # 💡 防禦修復三：只有當「一整年交易日加起來不滿 5 年（例如少於 1200 天）」才噴出警告
-            if res['actual_days'] < 1250:
+            # 💡 【核心修復三】：只有當「實際天數真的不滿5年（小於1200天）」才噴出警告
+            if res['actual_days'] < 1200:
                 st.warning(f"⚠️ **【上市未滿五年提示】**：{ticker} 在台股上市至今僅有 `{res['actual_days']}` 個交易日，以下數據為其自上市日至今的實際模擬結果。")
                 
             st.markdown("### 📊 策略回測核心報告 (5年完全體)")
@@ -261,7 +254,7 @@ def render_etf_dashboard(ticker, display_name):
             with kpi_col2: st.metric(label="📊 總交易次數", value=f"{res['total_trades']} 次")
             with kpi_col3: st.metric(label="🎯 策略總勝率", value=f"{res['win_rate']:.1f}%")
             with kpi_col4: st.success(f"🟢 平均每次賺取：{res['avg_earn']:+.2f}%")
-            with kpi_col5: st.error(f"🔴 平均每次虧損：{res['avg_loss']:+.2f}%")
+            with kpi_col5: st.error(f"🔴 平均每次虧損：{res['avg_loss']:.2f}%")
                 
             with st.expander("📋 檢視詳細歷史進出場歷史明細"):
                 for log in res['logs']: st.write(log)
@@ -294,5 +287,5 @@ if mode == "精選個股主頁 (按鈕切換)":
 else:
     search_input = st.sidebar.text_input("輸入台股代碼 (例如: 00940)", value="00940")
     search_input_full = search_input.strip() if search_input.endswith(".TW") else f"{search_input.strip()}.TW"
-    st.info("💡 **【實戰操盤錦囊】** 下方技術線圖中，**開頭綠色垂直虛線**代表【除息日】。下方 KD 圖中，**紅色點虛線**為 82 出場防守線，**綠色點虛線**為 18 撈底警戒線。")
+    st.info("💡 **【實戰操盤錦囊】** 下方技術線圖中，**開頭綠色垂直虛線**代表【除息日】。下方 KD 圖中，**紅色點虛線**為 82 出場防守線 Gord，**綠色點虛線**為 18 撈底警戒線。")
     render_etf_dashboard(search_input_full, "自訂搜尋個股分析")
