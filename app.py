@@ -35,13 +35,12 @@ FEATURED_LIST = {
 def get_etf_data(ticker):
     try:
         etf = yf.Ticker(ticker)
-        # 💡 【核心修復一】：先嘗試抓 5年 數據，確保舊股票天數飽滿
-        df = etf.history(period="5y", auto_adjust=False, actions=True)
-        
-        # 💡 【新股防禦機制】：如果 5y 抓下來是空的（代表是像 00929 這種年輕股票，在雲端被拒絕）
-        if df.empty or len(df) < 22:
-            # 自動改用 period="max" 抓取它出生到現在的所有歷史數據
-            df = etf.history(period="max", auto_adjust=False, actions=True)
+# 🟢 修正後的雙保險純淨數據下載邏輯：
+# 直接向 Yahoo 強制索取「還原除權息後的真實歷史收盤價 (auto_adjust=True)」
+df = etf.history(period="5y", auto_adjust=True)
+
+if df.empty or len(df) < 22:
+    df = etf.history(period="max", auto_adjust=True)
             
         if df.empty or len(df) < 22:
             return None
