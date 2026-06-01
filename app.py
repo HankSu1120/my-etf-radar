@@ -19,7 +19,20 @@ def get_etf_data(ticker):
         etf = yf.Ticker(ticker)
         # 強制索取「還原除權息後的真實歷史收盤價 (auto_adjust=True)」
         df = etf.history(period="5y", auto_adjust=True)
-        
+        # 網頁基本設定
+st.set_page_config(page_title="高股息 ETF 雲端決策面板", layout="wide")
+st.title("📊 高股息 ETF 智慧決策面板 (複利校正完全體)")
+st.subheader("基於自訂「除息後低檔撈底 ＆ 4天高檔鈍化抱緊」策略")
+
+# ==========================================
+# 🎯 檢查這裡：四大天王精選清單定義（必須放在 get_etf_data 之前！）
+# ==========================================
+FEATURED_LIST = {
+    "00929.TW": "復華台灣科技優息 (月配)",
+    "00919.TW": "群益台灣精選高息 (季配)",
+    "0056.TW": "元大高股息 (季配)",
+    "00878.TW": "國泰永續高股息 (季配)"
+}
         # 新股防禦機制：如果 5y 抓下來是空的（例如 00929 在雲端被拒絕）
         if df.empty or len(df) < 22:
             df = etf.history(period="max", auto_adjust=True)
