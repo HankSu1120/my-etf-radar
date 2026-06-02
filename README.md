@@ -8,7 +8,7 @@ Notification: LINE Notify
 
 這是一個專為台灣高股息 ETF（如 00929、00919、0056、00878）設計的全方位量化投資決策面板。本專案擺脫傳統單機運作的限制，整合了網頁前端、雲端資料庫、定時排程與即時通訊軟體，打造出一個不需要電腦開機、24 小時在線運作的量化交易 SaaS 平台。
 
-線上即時戰情面板： [填入你的 Streamlit 網頁連結，例如：https://xxxx.streamlit.app]
+線上即時戰情面板：[ [填入你的 Streamlit 網頁連結，例如：https://xxxx.streamlit.app]](https://my-etf-radar-x9zih5qspvgsgnywx6rick.streamlit.app/#dd19d17e)
 
 ---
 
