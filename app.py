@@ -145,10 +145,15 @@ def scan_and_save_signals():
     return radar_data
 
 # ==========================================
-# 📊 6. 核心回測引擎 (與 Colab 100% 同步的真實複利模型)
+# 📊 6. 核心回測引擎 (💯 同步台股 933 KD 指標、防錯位完全體)
 # ==========================================
 def run_backtest_5y_corrected(df_all):
-    df = df_all.tail(1200).copy()
+    # 🎯 核心關鍵：不要一開始就用 .tail() 切斷！保留 df_all 完整歷史陣列以防 KD 錯位
+    df = df_all.copy()
+    
+    # 🎯 動態起跑線：老股票最多回溯 1200 天(約5年)，新上市股票(如00919)有多少天就跑多少天
+    total_rows = len(df)
+    backtest_start_index = max(9, total_rows - 1200)
     
     position = 0
     buy_price = 0
@@ -160,26 +165,35 @@ def run_backtest_5y_corrected(df_all):
     earn_pcts = []
     loss_pcts = []
     
-    for i in range(5, len(df)):
+    # 🎯 迴圈從正確的歷史時間起跑點開始滾動
+    for i in range(backtest_start_index, total_rows):
         current_date = df.index[i].strftime('%Y-%m-%d')
+        
+        # 計算除息日天數
         div_days = 999
         for k in range(i, -1, -1):
             if df['Dividends'].iloc[k] > 0:
                 div_days = i - k
                 break
         
+        # 🟢 買入訊號判定
         if position == 0 and div_days <= 20:
             low_zone = False
+            # 檢查過去 5 天內(包含今天) 是否有落入 KD < 18 的超跌區
             for j in range(i-4, i+1):
-                if df['K'].iloc[j] < 18 and df['D'].iloc[j] < 18: low_zone = True
+                if j >= 0 and df['K'].iloc[j] < 18 and df['D'].iloc[j] < 18: 
+                    low_zone = True
+            # 黃金交叉：今日 K > D 且 昨天 K <= D
             if low_zone and df['K'].iloc[i] > df['D'].iloc[i] and df['K'].iloc[i-1] <= df['D'].iloc[i-1]:
                 position = 1
                 buy_price = df['Close'].iloc[i]
                 trade_log.append(f"🟢 【買入】日期: {current_date} | 價格: ${buy_price:.2f}")
                 
+        # 🔴 賣出訊號判定
         elif position == 1:
             k_window_4d = df['K'].iloc[i-4:i]
             d_window_4d = df['D'].iloc[i-4:i]
+            # 連續 4 天高檔鈍化 (K和D皆大於82)，且今天跌破 82
             if (k_window_4d > 82).all() and (d_window_4d > 82).all() and df['K'].iloc[i] < 82:
                 position = 0
                 sell_price = df['Close'].iloc[i]
@@ -189,6 +203,7 @@ def run_backtest_5y_corrected(df_all):
                 current_balance = current_balance * (1 + ret / 100)
                 trade_log.append(f"🔴 【賣出】日期: {current_date} | 價格: ${sell_price:.2f} | 本趟獲利: {ret:+.2f}%")
                 
+    # 🔒 期末未平倉結算
     if position == 1:
         sell_price = df['Close'].iloc[-1]
         ret = (sell_price - buy_price) / buy_price * 100
@@ -214,9 +229,8 @@ def run_backtest_5y_corrected(df_all):
         "avg_earn": avg_earn,
         "avg_loss": avg_loss,
         "logs": trade_log,
-        "actual_days": len(df_all)
+        "actual_days": total_rows
     }
-
 # ==========================================
 # 🖥️ 7. 前端畫面佈局與渲染
 # ==========================================
