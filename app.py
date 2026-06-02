@@ -194,12 +194,7 @@ def run_backtest_5y_corrected(df_all):
     earn_pcts = []
     loss_pcts = []
     
-    # 如果資料太少（少於計算 KD 的基本天數），直接回傳空報告，不讓程式崩潰
-    if len(df) < 10:
-        return {
-            "total_return": 0.0, "total_trades": 0, "win_rate": 0.0,
-            "avg_earn": 0.0, "avg_loss": 0.0, "logs": ["⚠️ 歷史數據過少，無法回測。"], "actual_days": available_rows
-        }
+
     
     for i in range(5, len(df)):
         current_date = df.index[i].strftime('%Y-%m-%d')
