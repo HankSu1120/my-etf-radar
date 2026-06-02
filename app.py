@@ -161,7 +161,7 @@ def run_backtest_5y_corrected(df_all):
     earn_pcts = []
     loss_pcts = []
     
-    for i in range(5, len(df)):
+    for i in range(6, len(df)):
         current_date = df.index[i].strftime('%Y-%m-%d')
         div_days = 999
         for k in range(i, -1, -1):
