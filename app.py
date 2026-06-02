@@ -1,5 +1,6 @@
 import streamlit as st
 import yfinance as yf
+import requests
 import pandas as pd
 import ta
 import plotly.graph_objects as go
@@ -15,38 +16,72 @@ st.title("📊 高股息 ETF 智慧決策面板")
 st.subheader("基於自訂「除息後低檔撈底 ＆ 4天高檔鈍化抱緊」策略")
 
 # ==========================================
-# 🔑 2. 雲端基地連線設定 (請保持你原本的設定)
+# 🔑 2. 雲端基地連線設定 (升級安全保險箱模式)
 # ==========================================
 SUPABASE_URL = "https://wgqwszdmvwfanrsghtcn.supabase.co" 
-SUPABASE_KEY = "這裡請貼上你那一串超級長的anon_public密鑰"
+
+# 🔒 自動讀取 Streamlit 雲端保險箱，若找不到則嘗試讀取本機，安全不外洩！
+if "SUPABASE_KEY" in st.secrets:
+    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+else:
+    SUPABASE_KEY = "這裡請替換成你本地測試用的密鑰，或在雲端後台設定"
 
 @st.cache_resource
 def init_supabase():
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
-supabase: Client = init_supabase()
+try:
+    supabase: Client = init_supabase()
+except Exception as e:
+    st.error(f"🔑 Supabase 連線初始化失敗，請檢查金鑰設定。錯誤: {e}")
 
 # ==========================================
-# 🎯 3. 四大天王精選清單定義
+# 🎯 3. 全自動高股息天網搜尋大腦 (自動擴充)
 # ==========================================
-FEATURED_LIST = {
-    "00929.TW": "復華台灣科技優息 (月配)",
-    "00919.TW": "群益台灣精選高息 (季配)",
-    "0056.TW": "元大高股息 (季配)",
-    "00878.TW": "國泰永續高股息 (季配)"
-}
+@st.cache_data(ttl="12h") # 每 12 小時去證交所更新一次名單即可
+def get_all_high_dividend_etfs():
+    """自動去台灣證交所抓取所有名字帶有高股息的 ETF"""
+    # 預設核心大軍，確保證交所塞車時基本盤不受影響
+    all_etfs = {
+        "0056.TW": "元大高股息",
+        "00878.TW": "國泰永續高股息",
+        "00919.TW": "群益台灣精選高息",
+        "00929.TW": "復華台灣科技優息",
+        "00915.TW": "凱基優選高股息30",
+        "00918.TW": "大華優利高填息30",
+        "00940.TW": "元大台灣價值高息",
+        "00713.TW": "元大台灣高息低波"
+    }
+    try:
+        # 線上串接台灣證交所 OpenAPI
+        url = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
+        res = requests.get(url, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            for item in data:
+                name = item.get("SecuritiesName", "")
+                code = item.get("SecuritiesCompanyCode", "")
+                # 只要名稱內涵高股息關鍵字，且代號長度正確
+                if any(k in name for k in ["高股息", "高息", "優息", "優選高息"]) and len(code) == 5:
+                    ticker_tw = f"{code}.TW"
+                    if ticker_tw not in all_etfs:
+                        all_etfs[ticker_tw] = name
+    except:
+        pass
+    return all_etfs
+
+# 讓精選清單直接等於自動天網下載的結果！
+FEATURED_LIST = get_all_high_dividend_etfs()
 
 # ==========================================
-# 📥 4. 歷史數據下載與指標計算大腦 (完美還原價版)
+# 📥 4. 歷史數據下載與指標計算大腦 (優化防卡死)
 # ==========================================
-# @st.cache_data(ttl=3600)
+@st.cache_data(ttl="1h", max_entries=20, show_spinner=False) # 🎯 升級 1小時自動過期，且不記憶壞數據
 def get_etf_data(ticker):
     try:
         etf = yf.Ticker(ticker)
-        # 強制索取「還原除權息後的真實歷史收盤價 (auto_adjust=True)」
         df = etf.history(period="5y", auto_adjust=True)
         
-        # 新股防禦機制：如果 5y 抓下來是空的（例如 00929 在雲端被拒絕）
         if df.empty or len(df) < 22:
             df = etf.history(period="max", auto_adjust=True)
             
@@ -64,25 +99,21 @@ def get_etf_data(ticker):
             else:
                 df_cleaned[col] = 0.0
                 
-        # 單獨保留 Dividends 欄位用來計算除息日天數
         if 'Dividends' in df.columns:
             df_cleaned['Dividends'] = df['Dividends'].iloc[:, 0] if isinstance(df['Dividends'], pd.DataFrame) else df['Dividends']
         else:
             df_cleaned['Dividends'] = 0.0
                 
         df_cleaned['MA22'] = df_cleaned['Close'].rolling(window=22).mean()
-# 1. 先計算 9 天內的最高與最低價
+
+        # 9, 3, 3 標準台股高流暢 KD 公式
         low_9 = df_cleaned['Low'].rolling(window=9).min()
         high_9 = df_cleaned['High'].rolling(window=9).max()
-        
-        # 2. 計算 RSV (未成熟隨機值)
         rsv = 100 * ((df_cleaned['Close'] - low_9) / (high_9 - low_9))
         
-        # 3. 初始化 K 和 D 陣列 (預設先給 50)
         k_list = [50.0] * len(df_cleaned)
         d_list = [50.0] * len(df_cleaned)
         
-        # 4. 用台股最經典的 1/3 與 2/3 權重平滑計算 KD
         for i in range(9, len(df_cleaned)):
             if not pd.isna(rsv.iloc[i]):
                 k_list[i] = (2/3) * k_list[i-1] + (1/3) * rsv.iloc[i]
@@ -145,18 +176,15 @@ def scan_and_save_signals():
     return radar_data
 
 # ==========================================
-# 📊 6. 核心回測引擎 (與 Colab 100% 同步的真實複利模型)
+# 📊 6. 核心回測引擎
 # ==========================================
 def run_backtest_5y_corrected(df_all):
     df = df_all.tail(1200).copy()
-    
     position = 0
     buy_price = 0
     trade_log = []
-    
     start_balance = 1000000.0
     current_balance = start_balance
-    
     earn_pcts = []
     loss_pcts = []
     
@@ -220,7 +248,8 @@ def run_backtest_5y_corrected(df_all):
 # ==========================================
 # 🖥️ 7. 前端畫面佈局與渲染
 # ==========================================
-current_radar = scan_and_save_signals()
+with st.spinner("🔄 天網雷達正在下載並計算全台高股息資料中..."):
+    current_radar = scan_and_save_signals()
 
 st.markdown("### 📋 今日高股息戰情總覽表")
 summary_df = pd.DataFrame(current_radar)
@@ -272,7 +301,6 @@ def render_etf_dashboard(ticker, display_name):
     if run_btn:
         with st.spinner("🚀 複利量化回測引擎運行中..."):
             res = run_backtest_5y_corrected(df)
-            
             if res['actual_days'] < 1200:
                 st.warning(f"⚠️ **【上市未滿五年提示】**：{ticker} 在台股上市至今僅有 `{res['actual_days']}` 個交易日，以下數據為其自上市日至今的實際模擬結果。")
                 
