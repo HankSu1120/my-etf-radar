@@ -33,8 +33,7 @@ FEATURED_LIST = {
     "00929.TW": "復華台灣科技優息 (月配)",
     "00919.TW": "群益台灣精選高息 (季配)",
     "0056.TW": "元大高股息 (季配)",
-    "00878.TW": "國泰永續高股息 (季配)",
-    "00713.TW": "元大台灣高息低波 (季配)"
+    "00878.TW": "國泰永續高股息 (季配)"
 }
 
 # ==========================================
@@ -161,7 +160,7 @@ def run_backtest_5y_corrected(df_all):
     earn_pcts = []
     loss_pcts = []
     
-    for i in range(6, len(df)):
+    for i in range(5, len(df)):
         current_date = df.index[i].strftime('%Y-%m-%d')
         div_days = 999
         for k in range(i, -1, -1):
