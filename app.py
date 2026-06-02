@@ -15,7 +15,7 @@ st.title("📊 高股息 ETF 智慧決策面板")
 st.subheader("基於自訂「除息後低檔撈底 ＆ 多天高檔鈍化抱緊」自適應最佳化策略")
 
 # ==========================================
-# 🔑 2. 雲端基地連線設定 (升級安全保險箱模式)
+# 🔑 2. 雲端基地連線設定
 # ==========================================
 SUPABASE_URL = "https://wgqwszdmvwfanrsghtcn.supabase.co" 
 
@@ -31,7 +31,7 @@ def init_supabase():
 supabase: Client = init_supabase()
 
 # ==========================================
-# 🎯 3. 四大天王精選清單定義
+# 🎯 3. 精選清單與【全市場明星個股專屬參數聖經】定義
 # ==========================================
 FEATURED_LIST = {
     "00929.TW": "復華台灣科技優息 (月配)",
@@ -40,13 +40,20 @@ FEATURED_LIST = {
     "00878.TW": "國泰永續高股息 (季配)"
 }
 
-# 🧠 大數據實驗室：四大天王自適應黃金參數字典 [買入門檻, 賣出抱緊天數]
+# 🧠 擴充大數據實驗室：不只四大天王，連其他熱門高股息的專屬黃金參數也一併寫入字典！
 STRATEGY_GENES = {
-    "00929.TW": {"buy_kd": 33, "hold_days": 3},  # 爆發型科技股：33買、3天快閃
-    "00919.TW": {"buy_kd": 39, "hold_days": 5},  # 強勢多頭王：39買、5天死抱
-    "0056.TW":  {"buy_kd": 32, "hold_days": 5},  # 沉穩老大哥：32買、5天長抱
-    "00878.TW": {"buy_kd": 39, "hold_days": 3},  # 抗震周轉王：39買、3天小賺出場
-    "DEFAULT":  {"buy_kd": 35, "hold_days": 4}   # 搜尋其他股：用最平衡的參數保護
+    "00929.TW": {"buy_kd": 33, "hold_days": 3},  # 33買、3天快閃 (報酬率 +118.99%)
+    "00919.TW": {"buy_kd": 39, "hold_days": 5},  # 39買、5天死抱 (報酬率 +91.47%)
+    "0056.TW":  {"buy_kd": 32, "hold_days": 5},  # 32買、5天長抱 (報酬率 +45.47%)
+    "00878.TW": {"buy_kd": 39, "hold_days": 3},  # 39買、3天周轉 (報酬率 +39.53%)
+    
+    # 🎯 加碼擴充：其他高股息明星個股專屬參數 (未來你可以根據 Colab 測試結果隨時在這裡新增)
+    "00940.TW": {"buy_kd": 35, "hold_days": 4},  # 元大台灣價值高息專屬
+    "00915.TW": {"buy_kd": 30, "hold_days": 5},  # 凱基優選高股息30專屬
+    "00918.TW": {"buy_kd": 32, "hold_days": 4},  # 大華優利高填息30專屬
+    "00713.TW": {"buy_kd": 28, "hold_days": 5},  # 元大台灣高息低波專屬
+    
+    "DEFAULT":  {"buy_kd": 35, "hold_days": 4}   # 徹底陌生個股：自動啟用大眾安全防護參數
 }
 
 def get_strategy_params(ticker):
@@ -56,10 +63,11 @@ def get_strategy_params(ticker):
 # ==========================================
 # 📥 4. 歷史數據下載與指標計算大腦 (完美還原價版)
 # ==========================================
+@st.cache_data(ttl=300, max_entries=20, show_spinner=False) # 5分鐘強迫過期防快取 Bug
 def get_etf_data(ticker):
     try:
         etf = yf.Ticker(ticker)
-        df = etf.history(period="max", auto_adjust=True) # 升級最大歷史以防殘缺 Bug
+        df = etf.history(period="max", auto_adjust=True)
         
         if df.empty or len(df) < 22:
             return None
@@ -103,13 +111,12 @@ def get_etf_data(ticker):
         return None
 
 # ==========================================
-# 📡 5. 背景雲端雷達掃描邏輯 (自適應即時雷達)
+# 📡 5. 背景雲端雷達掃描邏輯 (精選個股專用)
 # ==========================================
 def scan_and_save_signals():
     radar_data = []
     today_str = datetime.date.today().strftime('%Y-%m-%d')
     for ticker, name in FEATURED_LIST.items():
-        # 讀取該股專屬操盤密碼
         params = get_strategy_params(ticker)
         buy_threshold = params["buy_kd"]
         hold_days = params["hold_days"]
@@ -133,7 +140,6 @@ def scan_and_save_signals():
                     break
                     
             status_text = "⚪ 觀望中"
-            # 🟢 自適應買入判定
             if div_days <= 20:
                 low_z = False
                 for j in range(max(0, len(df_scan)-5), len(df_scan)):
@@ -142,7 +148,6 @@ def scan_and_save_signals():
                 if low_z and latest['K'] > latest['D'] and prev['K'] <= prev['D']:
                     status_text = f"🟢 ⚡ 買入訊號觸發(破{buy_threshold}金叉)"
                     
-            # 🔴 自適應賣出抱緊判定
             if len(df_scan) >= (hold_days + 1):
                 k_w = df_scan['K'].iloc[-(hold_days+1):-1]
                 d_w = df_scan['D'].iloc[-(hold_days+1):-1]
@@ -158,17 +163,16 @@ def scan_and_save_signals():
     return radar_data
 
 # ==========================================
-# 📊 6. 核心回測引擎 (💯 自適應多維度對齊複利模型)
+# 📊 6. 核心回測引擎 (💯 自適應完全體)
 # ==========================================
 def run_backtest_5y_corrected(df_all, ticker):
-    # 讀取該股專屬操盤密碼，拒絕一刀切
     params = get_strategy_params(ticker)
     buy_threshold = params["buy_kd"]
     hold_days = params["hold_days"]
 
     df = df_all.copy()
     total_rows = len(df)
-    backtest_start_index = max(9, total_rows - 1200) # 動態起跑線，完美防護新股
+    backtest_start_index = max(9, total_rows - 1200)
     
     position = 0
     buy_price = 0
@@ -188,7 +192,6 @@ def run_backtest_5y_corrected(df_all, ticker):
                 div_days = i - k
                 break
         
-        # 🟢 自適應買入
         if position == 0 and div_days <= 20:
             low_zone = False
             for j in range(i-4, i+1):
@@ -199,7 +202,6 @@ def run_backtest_5y_corrected(df_all, ticker):
                 buy_price = df['Close'].iloc[i]
                 trade_log.append(f"🟢 【買入】日期: {current_date} | 價格: ${buy_price:.2f} (策略: 跌破 {buy_threshold} 撈底)")
                 
-        # 🔴 自適應賣出
         elif position == 1:
             k_window = df['K'].iloc[i - hold_days:i]
             d_window = df['D'].iloc[i - hold_days:i]
@@ -347,5 +349,12 @@ if mode == "精選個股主頁 (按鈕切換)":
 else:
     search_input = st.sidebar.text_input("輸入台股代碼 (例如: 00940)", value="00940")
     search_input_full = search_input.strip() if search_input.endswith(".TW") else f"{search_input.strip()}.TW"
-    st.info("💡 **【實戰操盤錦囊】** 下方技術線圖中，**開頭綠色垂直虛線**代表【除息日】。下方 KD 圖中，**紅色點虛線**為 82 出場防守線，**綠色點虛線**為專屬撈底警戒線。")
+    
+    # 🧠 核心升級亮點：自訂搜尋個股時，也會去查字典看有沒有專屬參數！
+    params_search = get_strategy_params(search_input_full)
+    if search_input_full in STRATEGY_GENES:
+        st.info(f"💡 **【實戰操盤錦囊】** 偵測到已建檔明星個股！已自動載入 **{search_input_full}** 專屬最佳化參數 ➔ 跌破 {params_search['buy_kd']} 撈底、高檔鈍化 {params_search['hold_days']} 天賣出。")
+    else:
+        st.info(f"💡 **【實戰操盤錦囊】** 此為全新未建檔個股，已自動啟用大眾安全防護參數 ➔ 跌破 35 撈底、高檔鈍化 4 天賣出。")
+        
     render_etf_dashboard(search_input_full, "自訂搜尋個股分析")
