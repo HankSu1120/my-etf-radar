@@ -178,8 +178,16 @@ def scan_and_save_signals():
 # ==========================================
 # 📊 6. 核心回測引擎 (💯 完美保留你原本最強、最純粹的複利模型)
 # ==========================================
+# ==========================================
+# 📊 6. 核心回測引擎 (修復新股指標錯位防爆版)
+# ==========================================
 def run_backtest_5y_corrected(df_all):
-    df = df_all.tail(1200).copy()
+    # 🎯 不要一開始就切斷 DataFrame！保留完整的 df_all 避免指標錯位
+    df = df_all.copy()
+    
+    # 🎯 計算我們實際上要跑回測的起點：最多回溯 1200 天，如果新股沒滿 1200 天，就從第 9 天(KD算好後)開始跑
+    total_rows = len(df)
+    backtest_start_index = max(9, total_rows - 1200)
     
     position = 0
     buy_price = 0
@@ -191,23 +199,29 @@ def run_backtest_5y_corrected(df_all):
     earn_pcts = []
     loss_pcts = []
     
-    for i in range(5, len(df)):
+    # 🎯 迴圈直接從正確的起點開始跑，完美相容新老股票！
+    for i in range(backtest_start_index, total_rows):
         current_date = df.index[i].strftime('%Y-%m-%d')
+        
+        # 計算除息日天數
         div_days = 999
         for k in range(i, -1, -1):
             if df['Dividends'].iloc[k] > 0:
                 div_days = i - k
                 break
         
+        # 買入邏輯
         if position == 0 and div_days <= 20:
             low_zone = False
             for j in range(i-4, i+1):
-                if df['K'].iloc[j] < 18 and df['D'].iloc[j] < 18: low_zone = True
+                if j >= 0 and df['K'].iloc[j] < 18 and df['D'].iloc[j] < 18: 
+                    low_zone = True
             if low_zone and df['K'].iloc[i] > df['D'].iloc[i] and df['K'].iloc[i-1] <= df['D'].iloc[i-1]:
                 position = 1
                 buy_price = df['Close'].iloc[i]
                 trade_log.append(f"🟢 【買入】日期: {current_date} | 價格: ${buy_price:.2f}")
                 
+        # 賣出邏輯
         elif position == 1:
             k_window_4d = df['K'].iloc[i-4:i]
             d_window_4d = df['D'].iloc[i-4:i]
@@ -220,6 +234,7 @@ def run_backtest_5y_corrected(df_all):
                 current_balance = current_balance * (1 + ret / 100)
                 trade_log.append(f"🔴 【賣出】日期: {current_date} | 價格: ${sell_price:.2f} | 本趟獲利: {ret:+.2f}%")
                 
+    # 未平倉結算
     if position == 1:
         sell_price = df['Close'].iloc[-1]
         ret = (sell_price - buy_price) / buy_price * 100
@@ -245,9 +260,8 @@ def run_backtest_5y_corrected(df_all):
         "avg_earn": avg_earn,
         "avg_loss": avg_loss,
         "logs": trade_log,
-        "actual_days": len(df_all)
+        "actual_days": total_rows
     }
-
 # ==========================================
 # 🖥️ 7. 前端畫面佈局與渲染
 # ==========================================
