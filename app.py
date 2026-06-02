@@ -71,12 +71,25 @@ def get_etf_data(ticker):
             df_cleaned['Dividends'] = 0.0
                 
         df_cleaned['MA22'] = df_cleaned['Close'].rolling(window=22).mean()
-        stoch = ta.momentum.StochasticOscillator(
-            high=df_cleaned['High'], low=df_cleaned['Low'], close=df_cleaned['Close'], 
-            window=9, smooth_window=3
-        )
-        df_cleaned['K'] = stoch.stoch()
-        df_cleaned['D'] = stoch.stoch_signal()
+# 1. 先計算 9 天內的最高與最低價
+        low_9 = df_cleaned['Low'].rolling(window=9).min()
+        high_9 = df_cleaned['High'].rolling(window=9).max()
+        
+        # 2. 計算 RSV (未成熟隨機值)
+        rsv = 100 * ((df_cleaned['Close'] - low_9) / (high_9 - low_9))
+        
+        # 3. 初始化 K 和 D 陣列 (預設先給 50)
+        k_list = [50.0] * len(df_cleaned)
+        d_list = [50.0] * len(df_cleaned)
+        
+        # 4. 用台股最經典的 1/3 與 2/3 權重平滑計算 KD
+        for i in range(9, len(df_cleaned)):
+            if not pd.isna(rsv.iloc[i]):
+                k_list[i] = (2/3) * k_list[i-1] + (1/3) * rsv.iloc[i]
+                d_list[i] = (2/3) * d_list[i-1] + (1/3) * k_list[i]
+                
+        df_cleaned['K'] = k_list
+        df_cleaned['D'] = d_list
         return df_cleaned.dropna()
         
     except Exception as e:
