@@ -45,9 +45,9 @@ def check_signals_and_notify():
     for row in response.data:
         status = row.get('signal_status', '⚪ 觀望中')
         
-
-# 🎯 只精選抓出真正觸發實戰訊號的黃金標的，其餘觀望雜訊一律過濾！
+        # 🎯 完美同步自適應新提示字眼，其餘觀望雜訊一律過濾！
         if "買入" in status or "賣出" in status or "抱緊" in status:
+            # 根據新版狀態文字動態給予正確字卡外框顏色
             color = "#2ecc71" if "買入" in status else ("#e74c3c" if "賣出" in status else ("#f1c40f" if "抱緊" in status else "#95a5a6"))
             
             item_block = {
@@ -89,7 +89,7 @@ def check_signals_and_notify():
                             "backgroundColor": "#1a1a1a",
                             "contents": [
                                 {"type": "text", "text": "📡 智慧策略雷達", "weight": "bold", "color": "#ffffff", "size": "lg"},
-                                {"type": "text", "text": f"實戰訊號觸發通知 ({today_str})", "color": "#aaaaaa", "size": "xs", "margin": "xs"}
+                                {"type": "text", "text": f"自適應實戰訊號通知 ({today_str})", "color": "#aaaaaa", "size": "xs", "margin": "xs"}
                             ]
                         },
                         "body": {
@@ -108,7 +108,7 @@ def check_signals_and_notify():
         else:
             print(f"❌ 發送失敗，LINE 伺服器錯誤回應: {req.text}")
     else:
-        print("⚪ 今日皆處於觀望型態，不發送 LINE 訊息打擾。")
+        print("⚪ 今日精選標的皆處於觀望型態，不發送 LINE 訊息打擾。")
 
 if __name__ == "__main__":
     check_signals_and_notify()
