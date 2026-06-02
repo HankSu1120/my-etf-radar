@@ -179,14 +179,27 @@ def scan_and_save_signals():
 # 📊 6. 核心回測引擎
 # ==========================================
 def run_backtest_5y_corrected(df_all):
-    df = df_all.tail(1200).copy()
+    # 🎯 彈性年資防爆機制：滿 5 年就拿 1200 天，不滿 5 年有多少就拿多少！
+    available_rows = len(df_all)
+    tail_rows = min(1200, available_rows)
+    df = df_all.tail(tail_rows).copy()
+    
     position = 0
     buy_price = 0
     trade_log = []
+    
     start_balance = 1000000.0
     current_balance = start_balance
+    
     earn_pcts = []
     loss_pcts = []
+    
+    # 如果資料太少（少於計算 KD 的基本天數），直接回傳空報告，不讓程式崩潰
+    if len(df) < 10:
+        return {
+            "total_return": 0.0, "total_trades": 0, "win_rate": 0.0,
+            "avg_earn": 0.0, "avg_loss": 0.0, "logs": ["⚠️ 歷史數據過少，無法回測。"], "actual_days": available_rows
+        }
     
     for i in range(5, len(df)):
         current_date = df.index[i].strftime('%Y-%m-%d')
@@ -242,9 +255,8 @@ def run_backtest_5y_corrected(df_all):
         "avg_earn": avg_earn,
         "avg_loss": avg_loss,
         "logs": trade_log,
-        "actual_days": len(df_all)
+        "actual_days": available_rows
     }
-
 # ==========================================
 # 🖥️ 7. 前端畫面佈局與渲染
 # ==========================================
