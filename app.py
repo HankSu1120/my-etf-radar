@@ -43,14 +43,14 @@ def get_all_high_dividend_etfs():
     """自動去台灣證交所抓取所有名字帶有高股息的 ETF"""
     # 預設核心大軍，確保證交所塞車時基本盤不受影響
     all_etfs = {
-        "0056.TW": "元大高股息",
-        "00878.TW": "國泰永續高股息",
-        "00919.TW": "群益台灣精選高息",
-        "00929.TW": "復華台灣科技優息",
-        "00915.TW": "凱基優選高股息30",
-        "00918.TW": "大華優利高填息30",
-        "00940.TW": "元大台灣價值高息",
-        "00713.TW": "元大台灣高息低波"
+        "0056.TW": "元大高股息 (季配)",
+        "00878.TW": "國泰永續高股息 (季配)",
+        "00919.TW": "群益台灣精選高息 (季配)",
+        "00929.TW": "復華台灣科技優息 (月配)",
+        "00915.TW": "凱基優選高股息30 (季配)",
+        "00918.TW": "大華優利高填息30 (季配)",
+        "00940.TW": "元大台灣價值高息 (月配)",
+        "00713.TW": "元大台灣高息低波 (季配)"
     }
     try:
         # 線上串接台灣證交所 OpenAPI
@@ -65,7 +65,7 @@ def get_all_high_dividend_etfs():
                 if any(k in name for k in ["高股息", "高息", "優息", "優選高息"]) and len(code) == 5:
                     ticker_tw = f"{code}.TW"
                     if ticker_tw not in all_etfs:
-                        all_etfs[ticker_tw] = name
+                        all_etfs[ticker_tw] = f"{name}"
     except:
         pass
     return all_etfs
@@ -76,7 +76,7 @@ FEATURED_LIST = get_all_high_dividend_etfs()
 # ==========================================
 # 📥 4. 歷史數據下載與指標計算大腦 (優化防卡死)
 # ==========================================
-@st.cache_data(ttl="1h", max_entries=20, show_spinner=False) # 🎯 升級 1小時自動過期，且不記憶壞數據
+@st.cache_data(ttl="1h", max_entries=20, show_spinner=False) # 🎯 1小時自動過期，且不記憶壞數據
 def get_etf_data(ticker):
     try:
         etf = yf.Ticker(ticker)
@@ -176,13 +176,10 @@ def scan_and_save_signals():
     return radar_data
 
 # ==========================================
-# 📊 6. 核心回測引擎
+# 📊 6. 核心回測引擎 (💯 完美保留你原本最強、最純粹的複利模型)
 # ==========================================
 def run_backtest_5y_corrected(df_all):
-    # 🎯 彈性年資防爆機制：滿 5 年就拿 1200 天，不滿 5 年有多少就拿多少！
-    available_rows = len(df_all)
-    tail_rows = min(1200, available_rows)
-    df = df_all.tail(tail_rows).copy()
+    df = df_all.tail(1200).copy()
     
     position = 0
     buy_price = 0
@@ -193,8 +190,6 @@ def run_backtest_5y_corrected(df_all):
     
     earn_pcts = []
     loss_pcts = []
-    
-
     
     for i in range(5, len(df)):
         current_date = df.index[i].strftime('%Y-%m-%d')
@@ -250,8 +245,9 @@ def run_backtest_5y_corrected(df_all):
         "avg_earn": avg_earn,
         "avg_loss": avg_loss,
         "logs": trade_log,
-        "actual_days": available_rows
+        "actual_days": len(df_all)
     }
+
 # ==========================================
 # 🖥️ 7. 前端畫面佈局與渲染
 # ==========================================
