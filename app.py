@@ -39,7 +39,7 @@ FEATURED_LIST = {
 # ==========================================
 # 📥 4. 歷史數據下載與指標計算大腦 (完美還原價版)
 # ==========================================
-@st.cache_data(ttl=3600)
+# @st.cache_data(ttl=3600)
 def get_etf_data(ticker):
     try:
         etf = yf.Ticker(ticker)
