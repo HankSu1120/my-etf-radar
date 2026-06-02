@@ -322,7 +322,7 @@ def render_etf_dashboard(ticker, display_name):
     
     m1, m2 = st.columns(2)
     with m1: st.metric(label="今日收盤價", value=f"${latest_day['Close']:.2f}", delta=f"{(latest_day['Close'] - prev_day['Close']):.2f}")
-    with m2: st.markdown(f"**📍 今日 KD 狀態:** `K = {latest_day['K']:.1f}` | `D = {latest_day['D']:.1f}` (專屬買點門檻: {params['buy_threshold']})")
+    with m2: st.markdown(f"**📍 今日 KD 狀態:** `K = {latest_day['K']:.1f}` | `D = {latest_day['D']:.1f}` (專屬買點門檻: {params['buy_kd']})")
     
     df_plot = df.tail(120)
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.6, 0.4], vertical_spacing=0.05)
@@ -333,7 +333,7 @@ def render_etf_dashboard(ticker, display_name):
     fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['K'], line=dict(color='blue', width=1.5), name="K值"), row=2, col=1)
     fig.add_trace(go.Scatter(x=df_plot.index, y=df_plot['D'], line=dict(color='fuchsia', width=1.5), name="D值"), row=2, col=1)
     fig.add_hline(y=82, line_width=1, line_dash="dot", line_color="red", row=2, col=1)
-    fig.add_hline(y=params['buy_threshold'], line_width=1, line_dash="dot", line_color="green", row=2, col=1)
+    fig.add_hline(y=params['buy_kd'], line_width=1, line_dash="dot", line_color="green", row=2, col=1)
     fig.update_layout(height=480, xaxis_rangeslider_visible=False, margin=dict(l=10, r=10, t=10, b=10))
     st.plotly_chart(fig, use_container_width=True)
 
