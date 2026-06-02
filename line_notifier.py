@@ -45,8 +45,9 @@ def check_signals_and_notify():
     for row in response.data:
         status = row.get('signal_status', '⚪ 觀望中')
         
-        # 💡 已為您強制開啟「觀望中」也能觸發，用來進行實戰發送測試！
-        if "買入" in status or "賣出" in status or "抱緊" in status or "觀望" in status:
+
+# 🎯 只精選抓出真正觸發實戰訊號的黃金標的，其餘觀望雜訊一律過濾！
+        if "買入" in status or "賣出" in status or "抱緊" in status:
             color = "#2ecc71" if "買入" in status else ("#e74c3c" if "賣出" in status else ("#f1c40f" if "抱緊" in status else "#95a5a6"))
             
             item_block = {
