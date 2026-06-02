@@ -31,29 +31,40 @@ def init_supabase():
 supabase: Client = init_supabase()
 
 # ==========================================
-# 🎯 3. 精選清單與【全市場明星個股專屬參數聖經】定義
+# 🎯 3. 動態追蹤清單與【全市場明星個股專屬參數聖經】定義
 # ==========================================
-FEATURED_LIST = {
-    "00929.TW": "復華台灣科技優息 (月配)",
-    "00919.TW": "群益台灣精選高息 (季配)",
-    "0056.TW": "元大高股息 (季配)",
-    "00878.TW": "國泰永續高股息 (季配)"
-}
+def load_watchlist_from_supabase():
+    """從 Supabase 雲端資料庫動態載入使用者自訂的精選股清單"""
+    try:
+        response = supabase.table("user_watchlist").select("*").execute()
+        if response.data:
+            # 將資料轉換回字典格式 {"00919.TW": "群益台灣精選高息 (季配)"}
+            return {row['ticker']: row['display_name'] for row in response.data}
+    except Exception as e:
+        st.sidebar.error(f"⚠️ 讀取雲端追蹤清單失敗，已啟用本地備用方案。原因: {e}")
+    
+    # 💡 備用底稿：若資料庫連線異常，提供預設四大天王防護
+    return {
+        "00929.TW": "復華台灣科技優息 (月配)",
+        "00919.TW": "群益台灣精選高息 (季配)",
+        "0056.TW": "元大高股息 (季配)",
+        "00878.TW": "國泰永續高股息 (季配)"
+    }
 
-# 🧠 擴充大數據實驗室：不只四大天王，連其他熱門高股息的專屬黃金參數也一併寫入字典！
+# 🚀 讓精選清單直接與雲端連動！
+FEATURED_LIST = load_watchlist_from_supabase()
+
+# 🧠 全市場明星個股專屬基因字典
 STRATEGY_GENES = {
-    "00929.TW": {"buy_kd": 33, "hold_days": 3},  # 33買、3天快閃 (報酬率 +118.99%)
-    "00919.TW": {"buy_kd": 39, "hold_days": 5},  # 39買、5天死抱 (報酬率 +91.47%)
-    "0056.TW":  {"buy_kd": 32, "hold_days": 5},  # 32買、5天長抱 (報酬率 +45.47%)
-    "00878.TW": {"buy_kd": 39, "hold_days": 3},  # 39買、3天周轉 (報酬率 +39.53%)
-    
-    # 🎯 加碼擴充：其他高股息明星個股專屬參數 (未來你可以根據 Colab 測試結果隨時在這裡新增)
-    "00940.TW": {"buy_kd": 35, "hold_days": 4},  # 元大台灣價值高息專屬
-    "00915.TW": {"buy_kd": 30, "hold_days": 5},  # 凱基優選高股息30專屬
-    "00918.TW": {"buy_kd": 32, "hold_days": 4},  # 大華優利高填息30專屬
-    "00713.TW": {"buy_kd": 28, "hold_days": 5},  # 元大台灣高息低波專屬
-    
-    "DEFAULT":  {"buy_kd": 35, "hold_days": 4}   # 徹底陌生個股：自動啟用大眾安全防護參數
+    "00929.TW": {"buy_kd": 33, "hold_days": 3},  # 33買、3天快閃
+    "00919.TW": {"buy_kd": 39, "hold_days": 5},  # 39買、5天死抱
+    "0056.TW":  {"buy_kd": 32, "hold_days": 5},  # 32買、5天長抱
+    "00878.TW": {"buy_kd": 39, "hold_days": 3},  # 39買、3天周轉
+    "00940.TW": {"buy_kd": 35, "hold_days": 4},  # 元大台灣價值高息
+    "00915.TW": {"buy_kd": 30, "hold_days": 5},  # 凱基優選高股息30
+    "00918.TW": {"buy_kd": 32, "hold_days": 4},  # 大華優利高填息30
+    "00713.TW": {"buy_kd": 28, "hold_days": 5},  # 元大台灣高息低波
+    "DEFAULT":  {"buy_kd": 35, "hold_days": 4}   # 陌生個股：自動啟用大眾安全防護參數
 }
 
 def get_strategy_params(ticker):
@@ -61,9 +72,9 @@ def get_strategy_params(ticker):
     return STRATEGY_GENES.get(ticker, STRATEGY_GENES["DEFAULT"])
 
 # ==========================================
-# 📥 4. 歷史數據下載與指標計算大腦 (完美還原價版)
+# 📥 4. 歷史數據下載與指標計算大腦
 # ==========================================
-@st.cache_data(ttl=300, max_entries=20, show_spinner=False) # 5分鐘強迫過期防快取 Bug
+@st.cache_data(ttl=300, max_entries=20, show_spinner=False)
 def get_etf_data(ticker):
     try:
         etf = yf.Ticker(ticker)
@@ -111,11 +122,13 @@ def get_etf_data(ticker):
         return None
 
 # ==========================================
-# 📡 5. 背景雲端雷達掃描邏輯 (精選個股專用)
+# 📡 5. 背景雲端雷達掃描邏輯 (隨使用者追蹤清單動態調整)
 # ==========================================
 def scan_and_save_signals():
     radar_data = []
     today_str = datetime.date.today().strftime('%Y-%m-%d')
+    
+    # 🎯 核心亮點：雷達掃描不再寫死，而是根據使用者當下加了哪些精選股，就自動去算哪些！
     for ticker, name in FEATURED_LIST.items():
         params = get_strategy_params(ticker)
         buy_threshold = params["buy_kd"]
@@ -278,8 +291,46 @@ with st.expander("🔔 展開查看今日所有高股息操作建議", expanded=
             for item in holds: st.warning(f"🚀 **{item['ticker']}** ({item['price']:.2f}元)\n\n*{item['status']}*")
         else: st.caption("⚪ 今日暫無股票處於飆速鈍化區")
 
+# ==========================================
+# ⚙️ 側邊欄控制面板 (整合個人化新增/刪除後台)
+# ==========================================
 st.sidebar.header("🔍 模式與個股搜尋")
 mode = st.sidebar.radio("請選擇操作模式", ["精選個股主頁 (按鈕切換)", "自訂搜尋個股分析"])
+
+st.sidebar.markdown("---")
+st.sidebar.header("🛠️ 精選股自訂後台")
+
+# 📥 互動元件一：新增股票到追蹤清單
+with st.sidebar.expander("➕ 新增股票至精選清單"):
+    new_ticker = st.text_input("輸入台股代碼 (如: 00915)", key="add_input").strip()
+    new_name = st.text_input("輸入股票名稱 (如: 凱基優選高股息)", key="add_name").strip()
+    if st.button("確認加入", use_container_width=True):
+        if new_ticker and new_name:
+            # 格式化代碼，自動補上 .TW
+            full_ticker = new_ticker.upper() if new_ticker.upper().endswith(".TW") else f"{new_ticker.upper()}.TW"
+            try:
+                supabase.table("user_watchlist").insert({"ticker": full_ticker, "display_name": new_name}).execute()
+                st.success(f"✅ {full_ticker} 已成功編入雲端清單！")
+                st.rerun() # 強制網頁刷洗重新讀取
+            except Exception as e:
+                st.error(f"新增失敗，代碼可能重複：{e}")
+        else:
+            st.warning("填寫不完整，請同時輸入代碼與中文名稱。")
+
+# 🗑️ 互動元件二：從追蹤清單移出股票
+with st.sidebar.expander("➖ 從精選清單中移出"):
+    if FEATURED_LIST:
+        delete_target = st.selectbox("請選擇要移出的標的", list(FEATURED_LIST.keys()))
+        if st.button("確認刪除移出", type="primary", use_container_width=True):
+            try:
+                supabase.table("user_watchlist").delete().eq("ticker", delete_target).execute()
+                st.success(f"🗑️ {delete_target} 已從雲端清單中移除！")
+                st.rerun() # 強制網頁刷洗重新讀取
+            except Exception as e:
+                st.error(f"移除失敗: {e}")
+    else:
+        st.caption("目前追蹤清單空空如也")
+
 
 def render_etf_dashboard(ticker, display_name):
     df = get_etf_data(ticker)
@@ -319,7 +370,6 @@ def render_etf_dashboard(ticker, display_name):
                 for log in res['logs']: st.write(log)
         st.divider()
 
-    # 讀取當前個股說明提示線
     params = get_strategy_params(ticker)
     
     m1, m2 = st.columns(2)
@@ -339,18 +389,21 @@ def render_etf_dashboard(ticker, display_name):
     fig.update_layout(height=480, xaxis_rangeslider_visible=False, margin=dict(l=10, r=10, t=10, b=10))
     st.plotly_chart(fig, use_container_width=True)
 
-# 底部渲染
+
+# 底部渲染主邏輯
 if mode == "精選個股主頁 (按鈕切換)":
     st.info("💡 **【實戰操盤錦囊】** 下方技術線圖中，**開頭綠色垂直虛線**代表【除息日】。下方 KD 圖中，**紅色點虛線**為 82 出場防守線，**綠色點虛線**為該個股專屬的最佳撈底警戒線。")
-    tab_titles = [f"📈 {ticker}" for ticker in FEATURED_LIST.keys()]
-    tabs = st.tabs(tab_titles)
-    for i, (ticker, name) in enumerate(FEATURED_LIST.items()):
-        with tabs[i]: render_etf_dashboard(ticker, name)
+    if FEATURED_LIST:
+        tab_titles = [f"📈 {ticker}" for ticker in FEATURED_LIST.keys()]
+        tabs = st.tabs(tab_titles)
+        for i, (ticker, name) in enumerate(FEATURED_LIST.items()):
+            with tabs[i]: render_etf_dashboard(ticker, name)
+    else:
+        st.warning("🌵 您的追蹤清單目前沒有任何股票，請使用左下角的管理後台新增股票！")
 else:
     search_input = st.sidebar.text_input("輸入台股代碼 (例如: 00940)", value="00940")
     search_input_full = search_input.strip() if search_input.endswith(".TW") else f"{search_input.strip()}.TW"
     
-    # 🧠 核心升級亮點：自訂搜尋個股時，也會去查字典看有沒有專屬參數！
     params_search = get_strategy_params(search_input_full)
     if search_input_full in STRATEGY_GENES:
         st.info(f"💡 **【實戰操盤錦囊】** 偵測到已建檔明星個股！已自動載入 **{search_input_full}** 專屬最佳化參數 ➔ 跌破 {params_search['buy_kd']} 撈底、高檔鈍化 {params_search['hold_days']} 天賣出。")
